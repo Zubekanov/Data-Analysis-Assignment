@@ -1,7 +1,8 @@
 import os
 import pandas as pd
+import matplotlib.pyplot as plt
 
-def dir_heads(relative_path: str, n: int = 5):
+def dir_describe_csvs(relative_path: str, n: int = 5):
 	"""
 	Displays basic info and the first n rows of all CSVs in the targeted directory.
 	"""
@@ -29,5 +30,213 @@ def dir_heads(relative_path: str, n: int = 5):
 			except Exception as e:
 				print(f"Could not read {filepath}, {e}")
 
+def txt_to_csv(filename: str):
+	"""
+	Read a whitespace-delimited text file from data_raw and save it as a CSV in data_cleaned.
+	Assumes the first line is the header and subsequent lines are data.
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+
+	raw_dir = os.path.join(script_dir, "data_raw")
+	clean_dir = os.path.join(script_dir, "data_cleaned")
+	os.makedirs(clean_dir, exist_ok=True)
+
+	input_path = os.path.join(raw_dir, filename)
+	if not os.path.isfile(input_path):
+		raise FileNotFoundError(f"Could not find file: {input_path}")
+
+	df = pd.read_csv(input_path, sep=r"\s+", engine="python")
+
+	base_name = os.path.splitext(filename)[0]
+	output_name = f"{base_name}.csv"
+	output_path = os.path.join(clean_dir, output_name)
+
+	df.to_csv(output_path, index=False)
+
+def keep_values(filename: str, values: dict):
+	"""
+	Filter rows in the CSV `filename` in data_raw to keep only those where *any* column matches 
+	a value from the provided `values` dictionary. The dictionary maps column headers to lists 
+	of allowed values. The resulting CSV is saved to data_cleaned with the same name.
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	raw_path = os.path.join(script_dir, "data_raw", filename)
+	output_dir = os.path.join(script_dir, "data_cleaned")
+	os.makedirs(output_dir, exist_ok=True)
+
+	df = pd.read_csv(raw_path)
+
+	# Build mask: keep any row that satisfies any condition
+	mask = pd.Series([False] * len(df))
+	for col, allowed in values.items():
+		if col in df.columns:
+			mask |= df[col].isin(allowed)
+		else:
+			print(f"Warning: column '{col}' not found in {filename}")
+
+	filtered_df = df[mask]
+
+	# Save result
+	output_path = os.path.join(output_dir, filename)
+	filtered_df.to_csv(output_path, index=False)
+
+def compute_cumulative_carbon(emissions_file: str):
+	"""
+	Reads CO₂ emissions from data_cleaned/emissions_file, converts to carbon (×0.272921),
+	computes cumulative carbon, and saves result as data_cleaned/Cumulative_Carbon.csv
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	path = os.path.join(script_dir, "data_cleaned", emissions_file)
+
+	df = pd.read_csv(path)
+	df = df.sort_values("Year").copy()
+	# Convert CO₂ mass to carbon mass
+	df["Annual_Carbon"] = df["Annual CO₂ emissions"] * 0.272921
+	df["Cumulative_Carbon"] = df["Annual_Carbon"].cumsum()
+
+	out_path = os.path.join(script_dir, "data_cleaned", "Cumulative_Carbon.csv")
+	df.to_csv(out_path, index=False, columns=["Year", "Cumulative_Carbon"])
+
+def join_temp_and_cumulative(temp_file: str, cumulative_file: str):
+	"""
+	Joins temperature anomaly and cumulative CO2 on Year,
+	and saves result as data_cleaned/Temp_And_Cumulative.csv
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	temp_path = os.path.join(script_dir, "data_cleaned", temp_file)
+	co2_path = os.path.join(script_dir, "data_cleaned", cumulative_file)
+
+	temp_df = pd.read_csv(temp_path)
+	co2_df = pd.read_csv(co2_path)
+
+	merged = pd.merge(temp_df, co2_df, on="Year")
+
+	out_path = os.path.join(script_dir, "data_cleaned", "Temp_And_Cumulative.csv")
+	merged.to_csv(out_path, index=False, columns=["Year", "Temperature_Anomaly", "Cumulative_Carbon"])
+
+def plot_temperature_anomaly():
+	"""
+	Plots Temperature Anomaly over time and saves to plots/temperature_anomaly.png
+	"""
+	import os
+	import pandas as pd
+	import matplotlib.pyplot as plt
+
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	data_path = os.path.join(script_dir, "data_cleaned", "NASA_Temperature_Anomaly.csv")
+	plot_dir = os.path.join(script_dir, "plots")
+	os.makedirs(plot_dir, exist_ok=True)
+
+	df = pd.read_csv(data_path)
+
+	plt.figure(figsize=(10, 6))
+	plt.plot(df["Year"], df["Temperature_Anomaly"], color="tab:red")
+	plt.xlabel("Year")
+	plt.ylabel("Temperature Anomaly (°C)")
+	plt.title("Global Temperature Anomaly Over Time")
+	plt.grid(True)
+	plt.tight_layout()
+
+	out_path = os.path.join(plot_dir, "temperature_anomaly.png")
+	plt.savefig(out_path)
+	plt.close()
+
+def plot_cumulative_carbon():
+	"""
+	Plots Cumulative Carbon (in trillion tonnes) over time and saves to plots/Cumulative_Carbon.png
+	"""
+	import os
+	import pandas as pd
+	import matplotlib.pyplot as plt
+
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	data_path = os.path.join(script_dir, "data_cleaned", "Cumulative_Carbon.csv")
+	plot_dir = os.path.join(script_dir, "plots")
+	os.makedirs(plot_dir, exist_ok=True)
+
+	df = pd.read_csv(data_path)
+	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
+
+	plt.figure(figsize=(10, 6))
+	plt.plot(df["Year"], df["Cumulative_Carbon_Tt"], color="tab:blue")
+	plt.xlabel("Year")
+	plt.ylabel("Cumulative Carbon Emissions (Trillion Tonnes of Carbon)")
+	plt.title("Cumulative Global Carbon Emissions Over Time")
+	plt.grid(True)
+	plt.tight_layout()
+
+	out_path = os.path.join(plot_dir, "Cumulative_Carbon.png")
+	plt.savefig(out_path)
+	plt.close()
+
+
+def plot_temp_and_cumulative_carbon_timeseries():
+	"""
+	Plots Temperature Anomaly and Cumulative Carbon (in trillion tonnes) over time,
+	and saves the plot to plots/temp_and_co2_timeseries.png.
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	data_path = os.path.join(script_dir, "data_cleaned", "Temp_And_Cumulative.csv")
+	plot_dir = os.path.join(script_dir, "plots")
+	os.makedirs(plot_dir, exist_ok=True)
+
+	df = pd.read_csv(data_path)
+	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
+
+	fig, ax1 = plt.subplots(figsize=(10, 6))
+
+	ax1.set_xlabel("Year")
+	ax1.set_ylabel("Temperature Anomaly (°C)", color="tab:red")
+	ax1.plot(df["Year"], df["Temperature_Anomaly"], color="tab:red", label="Temperature Anomaly")
+	ax1.tick_params(axis="y", labelcolor="tab:red")
+
+	ax2 = ax1.twinx()
+	ax2.set_ylabel("Cumulative Carbon Emissions (TtC)", color="tab:blue")
+	ax2.plot(df["Year"], df["Cumulative_Carbon_Tt"], color="tab:blue", label="Cumulative Carbon")
+	ax2.tick_params(axis="y", labelcolor="tab:blue")
+
+	plt.title("Global Temperature Anomaly and Cumulative Carbon Over Time")
+	fig.tight_layout()
+
+	output_path = os.path.join(plot_dir, "temp_and_co2_timeseries.png")
+	plt.savefig(output_path)
+	plt.close()
+
+def plot_temp_vs_cumulative_carbon():
+	"""
+	Creates a scatter plot of Temperature Anomaly vs. Cumulative Carbon (in trillion tonnes),
+	using data from data_cleaned/csv_file, and saves the plot to plots/temp_vs_cumulative.png.
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	data_path = os.path.join(script_dir, "data_cleaned", "Temp_And_Cumulative.csv")
+	plot_dir = os.path.join(script_dir, "plots")
+	os.makedirs(plot_dir, exist_ok=True)
+
+	df = pd.read_csv(data_path)
+
+	# Convert to trillions of tonnes
+	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
+
+	plt.figure(figsize=(8, 6))
+	plt.scatter(df["Cumulative_Carbon_Tt"], df["Temperature_Anomaly"], s=15)
+	plt.xlabel("Cumulative Carbon Emissions (TtC)")  # TtC = trillion tonnes carbon
+	plt.ylabel("Temperature Anomaly (°C)")
+	plt.title("Temperature Anomaly vs. Cumulative Carbon")
+	plt.grid(True)
+	plt.tight_layout()
+
+	output_path = os.path.join(plot_dir, "temp_vs_cumulative.png")
+	plt.savefig(output_path)
+	plt.close()
+
 if __name__ == "__main__":
-	dir_heads("data_raw")
+	# txt_to_csv("NASA_Temperature_Anomaly.txt")
+	# keep_values("CO2_Emissions.csv", {"Entity":["World"]})
+	compute_cumulative_carbon("CO2_Emissions.csv")
+	join_temp_and_cumulative("NASA_Temperature_Anomaly.csv", "Cumulative_Carbon.csv")
+	plot_temperature_anomaly()
+	plot_cumulative_carbon()
+	plot_temp_and_cumulative_carbon_timeseries()
+	plot_temp_vs_cumulative_carbon()
+
+	dir_describe_csvs("data_cleaned")
