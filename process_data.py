@@ -349,7 +349,7 @@ def plot_ccr_over_time():
 	plt.close()
 
 if __name__ == "__main__":
-	txt_to_csv("NASA_Temperature_Anomaly.txt")
+	txt_to_csv("NASA_Temperature_Anomaly_nosmooth.txt")
 	keep_values("CO2_Emissions.csv", {"Entity":["World"]})
 	compute_cumulative_carbon("CO2_Emissions.csv")
 	join_temp_and_cumulative("NASA_Temperature_Anomaly.csv", "Cumulative_Carbon.csv")
