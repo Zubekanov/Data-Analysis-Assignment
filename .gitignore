@@ -1,6 +1,7 @@
 # Ignore contents of data_ folders
-data_*/*
+data_cleaned/*
 description.txt
+plots/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
