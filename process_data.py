@@ -82,27 +82,24 @@ def keep_values(filename: str, values: dict):
 	filtered_df.to_csv(output_path, index=False)
 
 def compute_cumulative_carbon(emissions_file: str):
-    """
-    Reads CO₂ emissions from data_cleaned/emissions_file,
-    converts to carbon (x 0.272921), computes cumulative carbon (1880→year),
-    and forces the 1880-value of Cumulative_Carbon to zero.
-    Saves result as data_cleaned/Cumulative_Carbon.csv.
-    """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(script_dir, "data_cleaned", emissions_file)
+	"""
+	Reads CO₂ emissions from data_cleaned/emissions_file,
+	converts to carbon (x 0.272921).
+	Saves result as data_cleaned/Cumulative_Carbon.csv.
+	"""
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	path = os.path.join(script_dir, "data_cleaned", emissions_file)
 
-    df = pd.read_csv(path)
-    df = df.sort_values("Year").copy()
+	df = pd.read_csv(path)
+	df = df.sort_values("Year").copy()
 
-    df["Annual_Carbon"] = df["Annual CO₂ emissions"] * 0.272921
+	df["Annual_Carbon"] = df["Annual CO₂ emissions"] * 0.272921
 
-    df = df[df["Year"] >= 1880].reset_index(drop=True)
-    df["Cumulative_Carbon"] = df["Annual_Carbon"].cumsum()
-    first_cum = df["Cumulative_Carbon"].iloc[0]
-    df["Cumulative_Carbon"] = df["Cumulative_Carbon"] - first_cum
+	df = df[df["Year"] >= 1880].reset_index(drop=True)
+	df["Cumulative_Carbon"] = df["Annual_Carbon"].cumsum()
 
-    out_path = os.path.join(script_dir, "data_cleaned", "Cumulative_Carbon.csv")
-    df.to_csv(out_path, index=False, columns=["Year", "Cumulative_Carbon"])
+	out_path = os.path.join(script_dir, "data_cleaned", "Cumulative_Carbon.csv")
+	df.to_csv(out_path, index=False, columns=["Year", "Cumulative_Carbon"])
 
 
 def join_temp_and_cumulative(temp_file: str, cumulative_file: str):
@@ -273,7 +270,11 @@ def plot_scatter_with_regression():
 	x = (df["Cumulative_Carbon"] / 1e12).values
 	y = df["Temperature_Anomaly"].values
 
-	m = np.sum(x * y) / np.sum(x * x)
+	# w = x for weighted regression
+	rtype = "Weighted Regression"
+	w = x
+
+	m = np.sum(w * x * y) / np.sum(w * x * x)
 	y_pred = m * x
 	# m, b = np.polyfit(x, y, 1)
 	# y_pred = m * x + b
@@ -297,7 +298,7 @@ def plot_scatter_with_regression():
 	plt.plot(x_line, m * x_line, color="tab:green", linewidth=2, label=f"Linear fit: CCR = {m:.1f}")
 	plt.xlabel("Cumulative Carbon Emissions (TtC)", fontsize=12)
 	plt.ylabel("Temperature Anomaly (°C)", fontsize=12)
-	plt.title("Temperature Anomaly vs. Cumulative Carbon with Linear Fit", fontsize=14, weight="bold")
+	plt.title(f"Temperature Anomaly vs. Cumulative Carbon with {rtype}", fontsize=10, weight="bold")
 	plt.legend()
 	plt.grid(True, linestyle="--", alpha=0.3)
 	plt.tight_layout()
@@ -348,8 +349,42 @@ def plot_ccr_over_time():
 	plt.savefig(out_path, dpi=300)
 	plt.close()
 
+def plot_ccr():
+	"""
+	Plots Temperature Anomaly (°C), Cumulative Carbon (Tt C) and CCR (°C/Tt C)
+	on the same axes, and saves to plots/all_metrics.png.
+	"""
+	# locate files relative to this script
+	script_dir = os.path.dirname(os.path.abspath(__file__))
+	data_path = os.path.join(script_dir, "data_cleaned", "Temp_And_Cumulative.csv")
+	plot_dir = os.path.join(script_dir, "plots")
+	os.makedirs(plot_dir, exist_ok=True)
+
+	# load and prepare
+	df = pd.read_csv(data_path)
+	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
+	df = df[df["Cumulative_Carbon_Tt"] > 0].copy()    # drop the zero‐carbon year
+	df["CCR"] = df["Temperature_Anomaly"] / df["Cumulative_Carbon_Tt"]
+
+	# plot
+	plt.figure(figsize=(10, 6))
+	plt.plot(df["Year"], df["Temperature_Anomaly"],    label="Temperature Anomaly (°C)")
+	plt.plot(df["Year"], df["Cumulative_Carbon_Tt"],  label="Cumulative Carbon (Tt C)")
+	plt.plot(df["Year"], df["CCR"],                   label="CCR (°C/Tt C)")
+	plt.xlabel("Year")
+	plt.ylabel("Value (°C or Tt C or °C/Tt C)")
+	plt.title("Temperature Anomaly, Cumulative Carbon & CCR Over Time")
+	plt.legend()
+	plt.grid(True)
+	plt.tight_layout()
+	plt.ylim(-1, 3)
+
+	out_path = os.path.join(plot_dir, "all_metrics.png")
+	plt.savefig(out_path, dpi=300)
+	plt.close()
+
 if __name__ == "__main__":
-	txt_to_csv("NASA_Temperature_Anomaly_nosmooth.txt")
+	txt_to_csv("NASA_Temperature_Anomaly_lowess.txt")
 	keep_values("CO2_Emissions.csv", {"Entity":["World"]})
 	compute_cumulative_carbon("CO2_Emissions.csv")
 	join_temp_and_cumulative("NASA_Temperature_Anomaly.csv", "Cumulative_Carbon.csv")
@@ -358,6 +393,7 @@ if __name__ == "__main__":
 	plot_temp_and_cumulative_carbon_timeseries()
 	plot_temp_vs_cumulative_carbon()
 	plot_scatter_with_regression()
-	plot_ccr_over_time()
+	# plot_ccr_over_time()
+	# plot_ccr()
 
 	dir_describe_csvs("data_cleaned")
