@@ -108,16 +108,16 @@ def plot_carbon_vs_ghg():
 	ghg_df = ghg_df[ghg_df["Entity"] == "World"].reset_index(drop=True)
 	ghg_df["Total_GHG_Emissions_Tt"] = ghg_df["Annual greenhouse gas emissions in CO₂ equivalents"] / 1e12
 	merged = pd.merge(co2_df, ghg_df, on="Year", how="inner")
-	plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 4))
 	plt.xlabel("Year")
 	plt.ylabel("Emissions (Tt)")
-	plt.plot(merged["Year"], merged["Annual CO₂ emissions"] / 1e12, label="Annual CO₂ Emissions (TtC)")
-	plt.plot(merged["Year"], merged["Total_GHG_Emissions_Tt"], label="Annual GHG Emissions (TtCO₂)")
+	plt.plot(merged["Year"], merged["Annual CO₂ emissions"] / 1e12, label="Cumulative CO₂ Emissions (TtC)")
+	plt.plot(merged["Year"], merged["Total_GHG_Emissions_Tt"], label="Cumulative GHG Emissions (TtCO₂)")
 	plt.title("Cumulative Carbon vs Total GHG Emissions Over Time")
 	plt.legend()
 	plt.grid(True)
 	plt.tight_layout()
-	plt.savefig(os.path.join(PLOTS_DIR, "carbon_vs_ghg.png"))
+	plt.savefig(os.path.join(PLOTS_DIR, "carbon_vs_ghg.png"), transparent=True)
 
 def save_scaled_temperature_anomaly():
 	"""Scales the yearly temperature anomaly by the ratio of carbon to total GHG yearly emissions."""
@@ -140,35 +140,35 @@ def save_scaled_temperature_anomaly():
 def plot_temperature_anomaly():
 	"""Plots Temperature Anomaly over time."""
 	df = pd.read_csv(os.path.join(CLEAN_DIR, NASA_TEMP_CSV))
-	plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 4))
 	plt.plot(df["Year"], df["Temperature_Anomaly"])
 	plt.xlabel("Year")
 	plt.ylabel("Temperature Anomaly (°C)")
 	plt.title("Global Temperature Anomaly Over Time")
 	plt.grid(True)
 	plt.tight_layout()
-	plt.savefig(os.path.join(PLOTS_DIR, "temperature_anomaly.png"))
+	plt.savefig(os.path.join(PLOTS_DIR, "temperature_anomaly.png"), transparent=True)
 	plt.close()
 
 def plot_cumulative_carbon():
 	"""Plots cumulative carbon over time."""
 	df = pd.read_csv(os.path.join(CLEAN_DIR, CUMULATIVE_CARBON_CSV))
 	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
-	plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 4))
 	plt.plot(df["Year"], df["Cumulative_Carbon_Tt"])
 	plt.xlabel("Year")
 	plt.ylabel("Cumulative Carbon Emissions (TtC)")
 	plt.title("Cumulative Global Carbon Emissions Over Time")
 	plt.grid(True)
 	plt.tight_layout()
-	plt.savefig(os.path.join(PLOTS_DIR, "Cumulative_Carbon.png"))
+	plt.savefig(os.path.join(PLOTS_DIR, "Cumulative_Carbon.png"), transparent=True)
 	plt.close()
 
 def plot_temp_and_cumulative_carbon_timeseries():
 	"""Plots temperature anomaly and cumulative carbon with twin axes."""
 	df = pd.read_csv(os.path.join(CLEAN_DIR, TEMP_AND_CUMULATIVE_CSV))
 	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
-	fig, ax1 = plt.subplots(figsize=(10, 6))
+	fig, ax1 = plt.subplots(figsize=(10, 4))
 	ax1.set_xlabel("Year")
 	ax1.set_ylabel("Temperature Anomaly (°C)")
 	ax1.plot(df["Year"], df["Temperature_Anomaly"], label="Temp Anomaly")
@@ -181,14 +181,18 @@ def plot_temp_and_cumulative_carbon_timeseries():
 	ax2.set_ylim(ymin, ymax)
 	plt.title("Global Temperature Anomaly and Cumulative Carbon Over Time")
 	fig.tight_layout()
-	plt.savefig(os.path.join(PLOTS_DIR, "temp_and_co2_timeseries.png"))
+	plt.savefig(os.path.join(PLOTS_DIR, "temp_and_co2_timeseries.png"), transparent=True)
 	plt.close()
 
 def plot_temp_vs_cumulative_carbon():
-	"""Plots temperature anomaly (red) and cumulative carbon (blue) with twin axes."""
+	"""Plots temperature anomaly (red), cumulative carbon (blue), and smoothed CCR (green) with twin axes."""
 	df = pd.read_csv(os.path.join(CLEAN_DIR, TEMP_AND_CUMULATIVE_CSV))
 	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
-	fig, ax1 = plt.subplots(figsize=(10, 6))
+	# compute instantaneous CCR and smooth it with a 10-year rolling window
+	df["CCR"] = df["Temperature_Anomaly"] / df["Cumulative_Carbon_Tt"]
+	df["CCR_Smoothed"] = df["CCR"].rolling(window=10, center=True).mean()
+
+	fig, ax1 = plt.subplots(figsize=(10, 4))
 	ax1.set_xlabel("Year")
 	ax1.set_ylabel("Temperature Anomaly (°C)", color="tab:red")
 	ax1.plot(
@@ -198,7 +202,16 @@ def plot_temp_vs_cumulative_carbon():
 		linewidth=2,
 		label="Scaled Temp Anomaly",
 	)
+	# plot the smoothed CCR on the same y-axis
+	ax1.plot(
+		df["Year"],
+		df["CCR_Smoothed"],
+		color="tab:green",
+		linewidth=2,
+		label="CCR (10-yr rolling avg)",
+	)
 	ax1.tick_params(axis="y", labelcolor="tab:red")
+
 	ax2 = ax1.twinx()
 	ax2.set_ylabel("Cumulative Carbon Emissions (Tt C)", color="tab:blue")
 	ax2.plot(
@@ -209,18 +222,24 @@ def plot_temp_vs_cumulative_carbon():
 		label="Cumulative Carbon",
 	)
 	ax2.tick_params(axis="y", labelcolor="tab:blue")
-	plt.title("Global Scaled Temperature Anomaly (red) and Cumulative Carbon (blue) Over Time")
+
+	plt.title("Global Scaled Temperature Anomaly, Cumulative Carbon, and CCR")
+	# keep the original y-limits
 	ymin = min(df["Temperature_Anomaly"].min(), df["Cumulative_Carbon_Tt"].min())
 	ymax = max(df["Temperature_Anomaly"].max(), df["Cumulative_Carbon_Tt"].max())
-	ax1.set_ylim(ymin, ymax)
-	ax2.set_ylim(ymin, ymax)
+	ax1.set_ylim(ymin, ymax + 1.2)
+	ax2.set_ylim(ymin, ymax + 1.2)
+
+	# combine legends from both axes
 	lines, labels = ax1.get_legend_handles_labels()
 	lines2, labels2 = ax2.get_legend_handles_labels()
 	ax1.legend(lines + lines2, labels + labels2, loc="upper left")
+
 	fig.tight_layout()
 	plt.grid(False)
-	plt.savefig(os.path.join(PLOTS_DIR, "temp_and_cumulative_colored.png"), dpi=300)
+	plt.savefig(os.path.join(PLOTS_DIR, "temp_and_cumulative_colored.png"), transparent=True)
 	plt.close()
+
 
 def plot_scatter_with_regression():
 	df = pd.read_csv(os.path.join(CLEAN_DIR, TEMP_AND_CUMULATIVE_CSV))
@@ -235,7 +254,7 @@ def plot_scatter_with_regression():
 	mse_w  = np.average((y - y_pred)**2, weights=w)
 	print(f"Slope: {m:.4f}, Intercept: {b:.4f}")
 	print(f"MSE: {mse:.6f}, Weighted MSE: {mse_w:.6f}")
-	plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 4))
 	plt.scatter(x, y, s=20, c="k", alpha=0.6)
 	xs = np.linspace(x.min(), x.max(), 200)
 	plt.plot(xs, m*xs + b, c="C1", lw=2, label=f"CCR={m:.2f}")
@@ -245,7 +264,7 @@ def plot_scatter_with_regression():
 	plt.legend()
 	plt.grid(True)
 	plt.tight_layout()
-	plt.savefig(os.path.join(PLOTS_DIR, "weighted_regression.png"), dpi=300)
+	plt.savefig(os.path.join(PLOTS_DIR, "weighted_regression.png"), transparent=True)
 	plt.close()
 
 def plot_ccr():
@@ -254,7 +273,7 @@ def plot_ccr():
 	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
 	df = df[df["Cumulative_Carbon_Tt"] > 0].copy()
 	df["CCR"] = df["Temperature_Anomaly"] / df["Cumulative_Carbon_Tt"]
-	plt.figure(figsize=(10, 6))
+	plt.figure(figsize=(10, 4))
 	plt.plot(df["Year"], df["Temperature_Anomaly"], label="Temperature Anomaly")
 	plt.plot(df["Year"], df["Cumulative_Carbon_Tt"], label="Cumulative Carbon")
 	plt.plot(df["Year"], df["CCR"], label="CCR")
@@ -265,7 +284,7 @@ def plot_ccr():
 	plt.grid(True)
 	plt.tight_layout()
 	plt.ylim(-1, 3)
-	plt.savefig(os.path.join(PLOTS_DIR, "all_metrics.png"), dpi=300)
+	plt.savefig(os.path.join(PLOTS_DIR, "all_metrics.png"), transparent=True)
 	plt.close()
 
 if __name__ == "__main__":
