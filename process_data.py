@@ -17,6 +17,8 @@ CO2_EMISSIONS_CSV = "CO2_Emissions.csv"
 GHG_EMISSIONS_CSV = "total_ghg_emissions.csv"
 CUMULATIVE_CARBON_CSV = "Cumulative_Carbon.csv"
 TEMP_AND_CUMULATIVE_CSV = "Temp_And_Cumulative.csv"
+CO2_CONC_TXT = "CO2_Concentration.txt"
+CO2_CONC_CSV = "CO2_Concentration.csv"
 
 KEEP_FILTERS = {
 	CO2_EMISSIONS_CSV: {"Entity": ["World"]},
@@ -287,6 +289,57 @@ def plot_ccr():
 	plt.savefig(os.path.join(PLOTS_DIR, "all_metrics.png"), transparent=True)
 	plt.close()
 
+def process_co2_concentration():
+	"""Reads CO2_Concentration.txt, extracts Year, monthly average and deseasonalized columns, saves CSV."""
+	in_path  = os.path.join(RAW_DIR, CO2_CONC_TXT)
+	if not os.path.isfile(in_path):
+		raise FileNotFoundError(f"Could not find file: {in_path}")
+	df = pd.read_csv(
+		in_path,
+		comment='#',
+		sep=r"\s+",
+		engine="python",
+		usecols=[0, 3, 4],
+		names=[
+			"Year", "Month", "Decimal_Date",
+			"Monthly_Average", "Deseasonalized",
+			"Days", "StdDev", "UncOfMonMean"
+		],
+		header=None,
+		skiprows=HEAD_N
+	)
+	out = df[["Year", "Monthly_Average", "Deseasonalized"]]
+	out_path = os.path.join(CLEAN_DIR, CO2_CONC_CSV)
+	out.to_csv(out_path, index=False)
+
+def plot_concentration_vs_cumulative_co2():
+	"""Plots atmospheric CO₂ concentration vs cumulative carbon emissions with regression line and slope in legend."""
+	cc_path   = os.path.join(CLEAN_DIR, CUMULATIVE_CARBON_CSV)
+	cc_df     = pd.read_csv(cc_path)
+	conc_path = os.path.join(CLEAN_DIR, CO2_CONC_CSV)
+	conc_df   = pd.read_csv(conc_path)
+	df        = pd.merge(conc_df, cc_df, on="Year", how="inner")
+	df["Cumulative_Carbon_Tt"] = df["Cumulative_Carbon"] / 1e12
+
+	x = df["Cumulative_Carbon_Tt"].values
+	y = df["Monthly_Average"].values
+	m, b = np.polyfit(x, y, 1)
+	y_pred = m * x + b
+
+	plt.figure(figsize=(10, 4))
+	plt.scatter(x, y, s=20, alpha=0.6, label="Data")
+	plt.plot(x, y_pred, color="C1", lw=2, label=f"Linear fit (slope={m:.2f} ppm/TtC)")
+	plt.xlabel("Cumulative Carbon Emissions (Tt C)")
+	plt.ylabel("CO₂ Concentration (ppm)")
+	plt.title("Atmospheric CO₂ Concentration vs Cumulative Carbon Emissions")
+	plt.grid(True)
+	plt.legend()
+	plt.tight_layout()
+
+	out_path = os.path.join(PLOTS_DIR, "concentration_vs_cumulative_carbon.png")
+	plt.savefig(out_path, transparent=True)
+	plt.close()
+
 if __name__ == "__main__":
 	txt_to_csv()
 	keep_values()
@@ -301,3 +354,5 @@ if __name__ == "__main__":
 	plot_scatter_with_regression()
 	plot_ccr()
 	# dir_describe_csvs()
+	process_co2_concentration()
+	plot_concentration_vs_cumulative_co2()
