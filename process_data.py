@@ -20,6 +20,10 @@ TEMP_AND_CUMULATIVE_CSV = "Temp_And_Cumulative.csv"
 CO2_CONC_TXT = "CO2_Concentration.txt"
 CO2_CONC_CSV = "CO2_Concentration.csv"
 
+UPPER_CCR = 2
+BEST_CCR = 1.35
+LOWER_CCR = 0.7
+
 KEEP_FILTERS = {
 	CO2_EMISSIONS_CSV: {"Entity": ["World"]},
 	GHG_EMISSIONS_CSV: {"Entity": ["World"]},
@@ -340,6 +344,47 @@ def plot_concentration_vs_cumulative_co2():
 	plt.savefig(out_path, transparent=True)
 	plt.close()
 
+def plot_extrapolated_temperature():
+	"""Plots historical Temp vs Cumulative Carbon and extrapolates using LOWER, BEST and UPPER CCR."""
+	import os
+	import numpy as np
+	import pandas as pd
+	import matplotlib.pyplot as plt
+
+	path = os.path.join(CLEAN_DIR, TEMP_AND_CUMULATIVE_CSV)
+	df = pd.read_csv(path)
+	x = df["Cumulative_Carbon"].values / 1e12
+	y = df["Temperature_Anomaly"].values
+
+	x_max = max(x.max(), 4.0 / LOWER_CCR)
+	x_extrap = np.linspace(0, x_max, 500)
+
+	plt.figure(figsize=(10, 4))
+	plt.scatter(x, y, s=20, alpha=0.6, label="Historical data")
+
+	for ccr, lbl in zip(
+		[LOWER_CCR, BEST_CCR, UPPER_CCR],
+		["Lower CCR", "Best CCR", "Upper CCR"]
+	):
+		plt.plot(
+			x_extrap,
+			ccr * x_extrap,
+			linestyle="--",
+			label=f"{lbl} ({ccr:.2f} °C / TtC)"
+		)
+
+	plt.xlabel("Cumulative Carbon Emissions (Tt C)")
+	plt.ylabel("Temperature Anomaly (°C)")
+	plt.title("Temperature Extrapolation Based on CCR Values")
+	plt.ylim(0, 4.5)
+	plt.legend()
+	plt.grid(True)
+	plt.tight_layout()
+
+	out = os.path.join(PLOTS_DIR, "temperature_extrapolation.png")
+	plt.savefig(out, transparent=True)
+	plt.close()
+
 if __name__ == "__main__":
 	txt_to_csv()
 	keep_values()
@@ -356,3 +401,4 @@ if __name__ == "__main__":
 	# dir_describe_csvs()
 	process_co2_concentration()
 	plot_concentration_vs_cumulative_co2()
+	plot_extrapolated_temperature()
